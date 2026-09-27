@@ -679,10 +679,18 @@ export async function openSession({
     ];
     const result = await run(args, { timeoutMs: (timeoutSeconds + 30) * 1000, cwd, env: invocation.env });
     if (result.timedOut) throw new AcpxError(`acpx ${agent} session prompt timed out after ${timeoutSeconds}s`, result);
+    let deniedRequests = 0;
     if (result.code !== 0) {
-      throw new AcpxError(
-        `acpx ${agent} session prompt failed (exit ${result.code}): ${firstLine(result.stderr) || `exit ${result.code}`}`,
-        result,
+      const usablePermissionDenied = result.code === 5 && Boolean(extractJson(stripAcpxNoise(result.stdout)));
+      if (!usablePermissionDenied) {
+        throw new AcpxError(
+          `acpx ${agent} session prompt failed (exit ${result.code}): ${firstLine(result.stderr) || `exit ${result.code}`}`,
+          result,
+        );
+      }
+      deniedRequests = Math.max(1, (String(result.stderr || "").match(/PERMISSION_DENIED/gi) || []).length);
+      notes.push(
+        `${agent} denied ${deniedRequests} tool request(s), but the turn returned parseable JSON; keeping the completed answer`,
       );
     }
 
@@ -695,7 +703,7 @@ export async function openSession({
       usage = cumulative ? subtractUsage(cumulative, storeUsageSeen) : null;
       if (cumulative) storeUsageSeen = cumulative;
     }
-    return { text: stripAcpxNoise(result.stdout), usage, raw: result.stdout, stderr: result.stderr, notes };
+    return { text: stripAcpxNoise(result.stdout), usage, raw: result.stdout, stderr: result.stderr, notes, deniedRequests };
   };
 
   return { notes, prompt, close };
