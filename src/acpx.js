@@ -517,6 +517,7 @@ export async function execOneShot({
       raw: result.stdout,
       stderr: result.stderr,
       notes: invocation.notes,
+      deniedRequests: 0,
     };
   } finally {
     invocation.dispose();
@@ -541,7 +542,7 @@ export async function execOneShot({
  * @returns {Promise<{ notes: string[],
  *   prompt: (options: { promptFile: string, timeoutSeconds?: number, promptRetries?: number,
  *     approveReads?: boolean, approveAll?: boolean, suppressReads?: boolean }) =>
- *     Promise<{ text: string, usage: Record<string, number> | null, raw: string, stderr: string, notes: string[] }>,
+ *     Promise<{ text: string, usage: Record<string, number> | null, raw: string, stderr: string, notes: string[], deniedRequests: number }>,
  *   close: () => Promise<void> }>}
  */
 export async function openSession({
