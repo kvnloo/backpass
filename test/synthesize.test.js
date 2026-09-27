@@ -35,6 +35,10 @@ if (argv.includes("set")) process.exit(0);
 const fileAt = argv.indexOf("--file");
 if (fileAt < 0) process.exit(2);
 const prompt = fs.readFileSync(argv[fileAt + 1], "utf8");
+if (script.failPrompt) {
+  process.stderr.write(script.failPrompt.stderr || "");
+  process.exit(script.failPrompt.code ?? 1);
+}
 const statePath = process.env.FAKE_ACPX_STATE;
 const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, "utf8")) : { annotate: 0 };
 function applyEdits(edits) {
@@ -204,6 +208,28 @@ function setup(
       .map((l) => JSON.parse(l));
   return { repo, config, memoryFile, externalSkillsDir, run, calls };
 }
+
+test("an acpx synthesis prompt failure names prompt size and useful stderr", async () => {
+  const { run } = setup({
+    failPrompt: {
+      code: 1,
+      stderr: "[acpx] tokens: input=12000 output=0 total=12000\\ncontext length exceeded\\n",
+    },
+    edit: {},
+    annotations: [{ reply: { edits: [] } }],
+  });
+
+  await assert.rejects(
+    () => run(),
+    (err) => {
+      assert.ok(err instanceof UserError, String(err));
+      assert.match(err.message, /synthesis-edit\.md measured \d+ bytes \(~\d+ tokens\)/);
+      assert.match(err.message, /context length exceeded/);
+      assert.match(err.hint, /does not silently truncate synthesis prompts/);
+      return true;
+    },
+  );
+});
 
 test("root and nested synthesis both refuse direct writes to the other memory file", async () => {
   for (const pass of ["root", "nested"]) {
