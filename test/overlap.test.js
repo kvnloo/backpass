@@ -35,6 +35,17 @@ test("a memory unit that restates a skill description is flagged", () => {
   );
 });
 
+test("one-token exact matches are too small to report as cross-surface duplication", () => {
+  const memoryFile = {
+    path: "CLAUDE.md",
+    units: [{ id: "AG-001", text: "deploy", tokens: 1 }],
+  };
+  const hits = crossSurfaceDuplicates(memoryFile, [
+    skill({ name: "deploy", description: "deploy", body: "" }),
+  ]);
+  assert.deepEqual(hits, []);
+});
+
 test("a short skill index entry is compared without its structural prefix", () => {
   const memoryFile = {
     path: "AGENTS.md",
