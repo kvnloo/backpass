@@ -164,6 +164,18 @@ function sessionCreateTimeoutError({ agent, acpxAgentArgs, timeoutMs, result }) 
   );
 }
 
+function isSessionStateContention(result) {
+  return /\b(?:EPERM|EACCES|EBUSY)\b/i.test(`${result?.stderr || ""}\n${result?.spawnError?.message || ""}`);
+}
+
+function sessionStateContentionError(agent, result) {
+  const detail = firstLine(result.stderr) || firstLine(result.spawnError?.message) || `exit ${result.code}`;
+  return new UserError(
+    `acpx ${agent} could not create a session because its session state is temporarily unavailable: ${detail}`,
+    "retry the run; if this repeats on Windows during parallel analysis, use --jobs 1 while the acpx session-index contention is resolved",
+  );
+}
+
 /**
  * Availability verdicts for a failed acpx call. Only a *classifiable* failure is a
  * reason to drop a candidate and fall through to the next one; anything else (a
@@ -647,6 +659,10 @@ export async function openSession({
   if (endedAtTimeout(created)) {
     invocation.dispose();
     throw sessionCreateTimeoutError({ agent, acpxAgentArgs, timeoutMs: createTimeoutMs, result: created });
+  }
+  if (created.code !== 0 && isSessionStateContention(created)) {
+    invocation.dispose();
+    throw sessionStateContentionError(agent, created);
   }
   if (created.code !== 0) {
     invocation.dispose();
