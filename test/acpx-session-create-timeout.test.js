@@ -44,7 +44,7 @@ if (creating && process.env.FAKE_ACPX_MODE === "timeout-exit") {
   process.exit(3);
 }
 if (creating && process.env.FAKE_ACPX_MODE === "contention") {
-  process.stderr.write("EPERM: operation not permitted, rename C:\\Users\\u\\.acpx\\sessions\\.tmp -> C:\\Users\\u\\.acpx\\sessions\\index.json\\n");
+  process.stderr.write("EPERM: operation not permitted, rename index.json\\n");
   process.exit(1);
 }
 if (creating && process.env.FAKE_ACPX_MODE === "no-sessions") {
