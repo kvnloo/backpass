@@ -79,7 +79,10 @@ test("isPointerTo accepts the @AGENTS.md import forms and nothing else", () => {
   assert.equal(isPointerTo("@./AGENTS.md", "AGENTS.md"), true);
   assert.equal(isPointerTo(renderPointer("AGENTS.md"), "AGENTS.md"), true);
   assert.equal(isPointerTo("\n<!-- c -->\n\n@AGENTS.md\n\n", "AGENTS.md"), true);
+  assert.equal(isPointerTo("# my-repo\n\n@AGENTS.md\n", "AGENTS.md"), true);
+  assert.equal(isPointerTo("## Claude memory\n<!-- c -->\n@./AGENTS.md\n", "AGENTS.md"), true);
   assert.equal(isPointerTo("@AGENTS.md\n- plus a real rule\n", "AGENTS.md"), false);
+  assert.equal(isPointerTo("# my-repo\n\n- real rule\n\n@AGENTS.md\n", "AGENTS.md"), false);
   assert.equal(isPointerTo("@docs/AGENTS.md", "AGENTS.md"), false);
   assert.equal(isPointerTo(SEPARATE_CLAUDE, "AGENTS.md"), false);
   assert.equal(isPointerTo("", "AGENTS.md"), false);
