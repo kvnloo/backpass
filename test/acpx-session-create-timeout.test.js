@@ -39,6 +39,10 @@ if (argv.includes("config") && argv.includes("show")) {
 const creating = argv.includes("sessions") && argv.includes("new");
 const status = argv.includes("status");
 const closing = argv.includes("sessions") && argv.includes("close");
+if (creating && process.env.FAKE_ACPX_MODE === "contention") {
+  process.stderr.write("EPERM: operation not permitted, rename C:\\Users\\u\\.acpx\\sessions\\.tmp -> C:\\Users\\u\\.acpx\\sessions\\index.json\\n");
+  process.exit(1);
+}
 if (creating && process.env.FAKE_ACPX_MODE === "no-sessions") {
   process.stderr.write("error: unknown command 'sessions'\\n");
   process.exit(2);
@@ -101,6 +105,34 @@ test("a stalled harness no longer claims the effort override is unsupported", as
       return true;
     },
   );
+});
+
+test("session-state contention is named instead of missing session support", async () => {
+  process.env.FAKE_ACPX_MODE = "contention";
+  try {
+    await assert.rejects(
+      () =>
+        sessionPrompt({
+          agent: "codex",
+          effort: "medium",
+          sessionName: "backpass-session-contention",
+          promptFile,
+          cwd: fixtureDir,
+          createTimeoutMs: 1500,
+        }),
+      (err) => {
+        assert.ok(err instanceof UserError, String(err));
+        assert.match(err.message, /session state is temporarily unavailable/);
+        assert.match(err.message, /EPERM/);
+        assert.doesNotMatch(err.message, /does not support sessions/);
+        assert.doesNotMatch(String(err.hint), /upgrade acpx/);
+        assert.match(String(err.hint), /--jobs 1/);
+        return true;
+      },
+    );
+  } finally {
+    process.env.FAKE_ACPX_MODE = "hang";
+  }
 });
 
 test("an adapter that really rejects sessions still reports missing session support", async () => {
