@@ -53,6 +53,8 @@ test("the staging copy holds exactly the memory file and the skills directory, u
   const { repo, workspace } = stage({
     ".agents/skills/db/SKILL.md": SKILL,
     ".agents/skills/db/notes.txt": "n",
+    ".agents/skills/db/.git/objects/pack-deadbeef": "git object",
+    ".agents/skills/db/.svn/wc.db": "svn metadata",
     "src/index.js": "code",
   });
   assert.equal(workspace.root, path.join(repo.root, ".backpass", "synthesis"));
@@ -62,6 +64,8 @@ test("the staging copy holds exactly the memory file and the skills directory, u
     fs.existsSync(path.join(workspace.root, ".agents/skills/db/notes.txt")),
     "skill directories are copied whole",
   );
+  assert.ok(!fs.existsSync(path.join(workspace.root, ".agents/skills/db/.git")), "git metadata is never staged");
+  assert.ok(!fs.existsSync(path.join(workspace.root, ".agents/skills/db/.svn")), "vcs metadata is never staged");
   assert.ok(!fs.existsSync(path.join(workspace.root, "src")), "the code is read from the repo, never copied");
   assert.deepEqual(
     [...workspace.originals.keys()].sort(),
