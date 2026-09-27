@@ -61,11 +61,16 @@ export class State {
           `could not secure state directory ${this.root} as mode ${this.dirMode.toString(8)}: ${err.message}`,
         );
       }
-      const actualMode = fs.statSync(this.root).mode & 0o777;
-      if (actualMode !== this.dirMode) {
-        throw new UserError(
-          `could not secure state directory ${this.root} as mode ${this.dirMode.toString(8)} (got ${actualMode.toString(8)})`,
-        );
+      // Windows does not expose POSIX permission bits through chmod/stat with the
+      // fidelity this check requires. Keep the chmod attempt, but do not reject a user
+      // state directory because NTFS reports a synthetic mode such as 0666.
+      if (process.platform !== "win32") {
+        const actualMode = fs.statSync(this.root).mode & 0o777;
+        if (actualMode !== this.dirMode) {
+          throw new UserError(
+            `could not secure state directory ${this.root} as mode ${this.dirMode.toString(8)} (got ${actualMode.toString(8)})`,
+          );
+        }
       }
     }
     fs.mkdirSync(this.evidenceDir, { recursive: true });
