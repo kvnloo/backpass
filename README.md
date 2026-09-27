@@ -61,7 +61,9 @@ npm install -g backpass
 npx backpass
 ```
 
-Requires **Node >= 22.5** and [`acpx`](https://github.com/openclaw/acpx) on your PATH.\nThe default `backpass apply` review UI also requires [`lavish-axi`](https://github.com/kunchenguid/lavish-axi) on your PATH; use `backpass apply --no-ui` for the terminal fallback.\n
+Requires **Node >= 22.5** and [`acpx`](https://github.com/openclaw/acpx) on your PATH.
+The default `backpass apply` review UI also requires [`lavish-axi`](https://github.com/kunchenguid/lavish-axi) on your PATH; use `backpass apply --no-ui` for the terminal fallback.
+
 backpass has **no API keys of its own**. Every model call goes through acpx to a harness
 you have already authenticated.
 
