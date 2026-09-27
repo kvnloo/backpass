@@ -32,7 +32,11 @@ test("user state creation tightens an existing directory to mode 0700", () => {
 
   new State(home, { stateDir, mode: 0o700, exclude: false }).ensure();
 
-  assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
+  if (process.platform === "win32") {
+    assert.equal(fs.existsSync(stateDir), true);
+  } else {
+    assert.equal(fs.statSync(stateDir).mode & 0o777, 0o700);
+  }
 });
 
 test("apply names a symlink whose writable file is in a read-only store", () => {
