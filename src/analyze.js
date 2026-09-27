@@ -156,6 +156,7 @@ export function sanitizeEvidence(parsed, memoryFile = null, trace = null) {
     gaps: [],
     usedRawTranscript: parsed?.usedRawTranscript === true,
     quotesNotInTrace: 0,
+    deniedRequests: 0,
   };
   if (!parsed || typeof parsed !== "object") return clean;
 
@@ -340,6 +341,7 @@ async function analyzeOne({
       status: "ok",
       evidence: sanitizeEvidence(parsed, memoryFile, distilled.trace),
       usage: usageRecord(ranWith, result),
+      deniedRequests: result.deniedRequests || 0,
       distilled,
     };
   } finally {
@@ -531,8 +533,10 @@ export async function analyzeTranscripts({
           ...base,
           status: "ok",
           stats: result.distilled.stats,
+          ...(result.deniedRequests ? { deniedRequests: result.deniedRequests } : {}),
           ...result.evidence,
         });
+        summary.deniedRequests += result.deniedRequests;
         evidenceTotals.positive += result.evidence.positive.length;
         evidenceTotals.negative += result.evidence.negative.length;
         evidenceTotals.gaps += result.evidence.gaps.length;
