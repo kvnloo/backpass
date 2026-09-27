@@ -480,8 +480,8 @@ export function reanchor(reference, file, threshold = 0.6) {
  * instructions of its own, so optimizing the target is fully correct and the pointer
  * stays valid afterwards.
  *
- * A file is a pointer to `target` when, ignoring blank lines and HTML comments, its
- * only content is the import line (`@AGENTS.md` or `@./AGENTS.md`).
+ * A file is a pointer to `target` when, ignoring leading Markdown headings, blank lines,
+ * and HTML comments, its only content is the import line (`@AGENTS.md` or `@./AGENTS.md`).
  */
 export function pointerImportPath(text, options = {}) {
   const lines = text
@@ -489,6 +489,7 @@ export function pointerImportPath(text, options = {}) {
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
+  while (lines.length && /^#{1,6}\\s+\\S/.test(lines[0])) lines.shift();
   if (lines.length !== 1) return null;
   const imported = lines[0].replace(/^@\.\//, "@");
   if (!imported.startsWith("@")) return null;
