@@ -120,6 +120,29 @@ test("only CLAUDE.md can cover a secondary memory file by import", () => {
   );
 });
 
+test("a CLAUDE.md symlink to AGENTS.md is treated as the same memory surface", () => {
+  const repo = repoWith({ "AGENTS.md": AGENTS });
+  fs.symlinkSync("AGENTS.md", path.join(repo.root, "CLAUDE.md"));
+  const config = loadConfig(repo.root);
+
+  const { result, warnings } = captureWarnings(() => primaryMemoryFile(repo, config));
+  assert.equal(result.file.path, "AGENTS.md");
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(
+    result.resolved.pointers.map((file) => file.path),
+    ["CLAUDE.md"],
+  );
+  assert.equal(result.resolved.separate.length, 0);
+
+  const written = applyOneEdit(repo, config);
+  assert.deepEqual(
+    written.written.map((entry) => entry.file),
+    ["AGENTS.md"],
+  );
+  assert.equal(fs.lstatSync(path.join(repo.root, "CLAUDE.md")).isSymbolicLink(), true);
+  assert.match(fs.readFileSync(path.join(repo.root, "AGENTS.md"), "utf8"), /full test suite/);
+});
+
 test("CLAUDE.md as a pointer resolves AGENTS.md silently and only AGENTS.md is written", () => {
   const repo = repoWith({ "AGENTS.md": AGENTS, "CLAUDE.md": renderPointer("AGENTS.md") });
   const config = loadConfig(repo.root);
