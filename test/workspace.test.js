@@ -764,7 +764,7 @@ test("an ignored file beside an external memory file is named by the path the us
   ]);
 });
 
-test("a skill in a store this user cannot read is skipped and named, not thrown", () => {
+test("a skill in a store this user cannot read is skipped and named, not thrown", { skip: process.platform === "win32" ? "Windows chmod does not create a POSIX-unreadable fixture" : false }, () => {
   const store = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "backpass-locked-store-")));
   fs.mkdirSync(path.join(store, "locked"));
   const unreadable = path.join(store, "locked", "SKILL.md");
