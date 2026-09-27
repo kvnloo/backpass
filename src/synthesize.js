@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { extractJson, isBlankOutput, openSession, usageRecord } from "./acpx.js";
+import { AcpxError, classifyAcpxFailure, extractJson, isBlankOutput, openSession, usageRecord } from "./acpx.js";
 import { expandHomePath, userClaudeSkillsDir } from "./config.js";
 import { renderEvidenceForPrompt } from "./fold.js";
 import { renderInstructionIndex, resolveMemoryPath } from "./memory.js";
@@ -24,7 +24,8 @@ import {
   repoFingerprint,
   workspacePathFor,
 } from "./workspace.js";
-import { UserError, color, info, warn } from "./logger.js";
+import { UserError, color, info, terminalSafe, warn } from "./logger.js";
+import { estimateTokens } from "./tokens.js";
 
 /**
  * Stage 3 of the pipeline (design section 3): high-reasoning synthesis that turns folded
@@ -78,6 +79,26 @@ const UNPARSEABLE_VIOLATION = "synthesis answered with text, but not with a JSON
 const KEPT_EDITING_VIOLATION = "synthesis kept editing the staging copy instead of annotating the measured changes";
 const EDIT_EMPTY_VIOLATION =
   "the synthesis edit turn left the staging copy byte-identical to the original, so its first annotate turn had nothing to describe";
+
+/**
+ * Add artifact-grounded context to an acpx failure from a synthesis prompt.
+ * Synthesis never truncates to fit: the user gets the measured prompt size and the
+ * first useful harness diagnostic so an oversized context is distinguishable from
+ * auth or a broken adapter.
+ */
+function synthesisPromptFailure(err, promptFile) {
+  if (!(err instanceof AcpxError)) return err;
+  const prompt = fs.readFileSync(promptFile, "utf8");
+  const stderrLine = String(err.stderr || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line && !/^\[acpx\]\s+tokens:/i.test(line));
+  const detail = stderrLine ? `; ${terminalSafe(stderrLine)}` : "";
+  return new UserError(
+    `${err.message}; ${path.basename(promptFile)} measured ${Buffer.byteLength(prompt, "utf8")} bytes (~${estimateTokens(prompt)} tokens)${detail}`,
+    `inspect ${promptFile}; backpass does not silently truncate synthesis prompts to fit a harness`,
+  );
+}
 
 /**
  * The budget the prompts frame is the always-loaded surface: the memory file plus
@@ -419,12 +440,17 @@ async function annotateLoop({
     fs.writeFileSync(promptFile, prompt);
     progress("annotate", { attempt: attempts + 1, turn, changes: measured.changes.length });
 
-    const result = await holder.prompt({
-      promptFile,
-      approveAll: true,
-      timeoutSeconds,
-      promptRetries,
-    });
+    let result;
+    try {
+      result = await holder.prompt({
+        promptFile,
+        approveAll: true,
+        timeoutSeconds,
+        promptRetries,
+      });
+    } catch (err) {
+      throw synthesisPromptFailure(err, promptFile);
+    }
     usage.push(usageRecord(holder.ranWith, result));
     for (const note of result.notes || []) noteOnce(note);
 
@@ -708,7 +734,11 @@ export async function synthesizeProposal({
     } catch (err) {
       await holder.session.close();
       holder.session = null;
-      throw err;
+      // Before any edit lands, availability failures still belong to the normal ladder.
+      // Everything else is a real synthesis-prompt failure and must be named with the
+      // prompt artifact that produced it.
+      if (err instanceof AcpxError && classifyAcpxFailure(err)) throw err;
+      throw synthesisPromptFailure(err, editPromptFile);
     }
   });
   usage.push(usageRecord(ranWith, editResult));
