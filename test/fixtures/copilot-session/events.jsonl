@@ -1,0 +1,7 @@
+{"type":"session.start","data":{"sessionId":"copilot-session-1","version":1,"producer":"copilot-agent","copilotVersion":"1.0.77","selectedModel":"claude-sonnet-5","startTime":"2026-08-05T01:39:53.221Z","context":{"cwd":"/repo/demo","gitRoot":"/repo/demo","branch":"main","headCommit":"abc123","repository":"acme/demo","hostType":"github"}},"id":"e1","timestamp":"2026-08-05T01:39:53.250Z","parentId":null}
+{"type":"user.message","data":{"content":"Fix the parser regression.","source":"user","attachments":[]},"id":"e2","timestamp":"2026-08-05T01:40:00.000Z","parentId":"e1"}
+{"type":"assistant.reasoning","data":{"reasoningId":"r1","content":"private chain of thought"},"id":"e3","timestamp":"2026-08-05T01:40:01.000Z","parentId":"e2"}
+{"type":"assistant.message","data":{"messageId":"m1","content":"I will run the focused test."},"id":"e4","timestamp":"2026-08-05T01:40:02.000Z","parentId":"e3"}
+{"type":"tool.execution_start","data":{"toolCallId":"call_1","toolName":"bash","arguments":{"command":"npm test -- parser"}},"id":"e5","timestamp":"2026-08-05T01:40:03.000Z","parentId":"e4"}
+{"type":"tool.execution_complete","data":{"toolCallId":"call_1","success":true,"result":{"content":"1 passing","detailedContent":"1 passing\\n"}},"id":"e6","timestamp":"2026-08-05T01:40:04.000Z","parentId":"e5"}
+{"type":"assistant.message","data":{"messageId":"m2","content":"The parser test passes."},"id":"e7","timestamp":"2026-08-05T01:40:05.000Z","parentId":"e6"}
