@@ -14,6 +14,7 @@ import * as grok from "../src/discovery/adapters/grok.js";
 import * as cursorCli from "../src/discovery/adapters/cursor-cli.js";
 import * as hermes from "../src/discovery/adapters/hermes.js";
 import * as opencode from "../src/discovery/adapters/opencode.js";
+import * as copilot from "../src/discovery/adapters/copilot.js";
 import { statOrNull } from "../src/discovery/adapters/shared.js";
 import { associate } from "../src/discovery/association.js";
 import { discoverTranscripts } from "../src/discovery/index.js";
@@ -34,6 +35,57 @@ function messages(events) {
 function tools(events) {
   return events.filter((e) => e.kind === "tool");
 }
+
+test("copilot adapter classifies session.start context and reads persisted turns", () => {
+  const file = path.join(FIXTURES, "copilot-session", "events.jsonl");
+  const descriptor = copilot.classify(candidateFor(file));
+
+  assert.equal(descriptor.id, "copilot-session-1");
+  assert.equal(descriptor.cwd, "/repo/demo");
+  assert.equal(descriptor.gitRoot, "/repo/demo");
+  assert.equal(descriptor.gitBranch, "main");
+  assert.deepEqual(descriptor.remotes, ["https://github.com/acme/demo.git"]);
+  assert.equal(descriptor.model, "claude-sonnet-5");
+
+  const { events, model } = copilot.read({ path: file });
+  assert.equal(model, "claude-sonnet-5");
+  assert.deepEqual(
+    messages(events).map((m) => m.role + ": " + m.text),
+    ["user: Fix the parser regression.", "assistant: I will run the focused test.", "assistant: The parser test passes."],
+  );
+
+  const [tool] = tools(events);
+  assert.equal(tool.name, "bash");
+  assert.equal(tool.input.command, "npm test -- parser");
+  assert.equal(tool.result, "1 passing");
+  assert.ok(!JSON.stringify(events).includes("private chain of thought"));
+});
+
+test("copilot adapter honors COPILOT_HOME and skips sessions without deterministic cwd", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-copilot-home-"));
+  const valid = path.join(root, "session-state", "valid");
+  const invalid = path.join(root, "session-state", "invalid");
+  fs.mkdirSync(valid, { recursive: true });
+  fs.mkdirSync(invalid, { recursive: true });
+  fs.copyFileSync(path.join(FIXTURES, "copilot-session", "events.jsonl"), path.join(valid, "events.jsonl"));
+  fs.writeFileSync(
+    path.join(invalid, "events.jsonl"),
+    JSON.stringify({ type: "user.message", data: { content: "no session context" } }) + "\n",
+  );
+
+  const previous = process.env.COPILOT_HOME;
+  process.env.COPILOT_HOME = root;
+  try {
+    const candidates = copilot.enumerate();
+    assert.equal(candidates.length, 2);
+    const classified = candidates.map((candidate) => copilot.classify(candidate)).filter(Boolean);
+    assert.equal(classified.length, 1);
+    assert.equal(classified[0].cwd, "/repo/demo");
+  } finally {
+    if (previous === undefined) delete process.env.COPILOT_HOME;
+    else process.env.COPILOT_HOME = previous;
+  }
+});
 
 test("claude adapter classifies a session by its per-line cwd", () => {
   const file = path.join(FIXTURES, "claude-session.jsonl");
