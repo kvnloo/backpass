@@ -256,6 +256,17 @@ test("an unchanged memory file applies every accepted edit and its skills", () =
 
   assert.match(applied.output, /wrote AGENTS\.md \(e1, e2\)/);
   assert.equal(porcelain(dir).includes(".backpass"), false, "run state stays out of the working tree");
+
+  const saved = JSON.parse(fs.readFileSync(path.join(dir, ".backpass/proposal.json"), "utf8"));
+  assert.equal(saved.appliedBy, "apply");
+  assert.ok(saved.appliedAt);
+
+  const replay = runApply(
+    dir,
+    proposal.edits.map((e) => e.id),
+  );
+  assert.equal(replay.status, 1, `replay should be refused:\n${replay.output}`);
+  assert.match(replay.output, /already applied by apply/);
 });
 
 test("a symlinked memory file updates its target without replacing the link", () => {
