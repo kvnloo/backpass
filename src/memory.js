@@ -512,6 +512,18 @@ export function isPointerTo(text, target, options = {}) {
   return resolvedSpec === resolvedTarget;
 }
 
+/** True when two configured paths resolve to the same underlying file. */
+function sameFileIdentity(a, b) {
+  try {
+    if (fs.realpathSync(a) === fs.realpathSync(b)) return true;
+    const left = fs.statSync(a);
+    const right = fs.statSync(b);
+    return left.ino !== 0 && right.ino !== 0 && left.dev === right.dev && left.ino === right.ino;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * What a run says about a separate file next to its primary: it is not updated, and the
  * fix is to consolidate it into the primary and leave a pointer behind.
@@ -543,7 +555,8 @@ export function resolveMemoryFiles(repoRoot, memoryFiles, options = {}) {
   const pointers = others.filter(
     (f) =>
       path.basename(f.absolute).toLowerCase() === "claude.md" &&
-      isPointerTo(f.text, primary.absolute, { fromDir: path.dirname(f.absolute) }),
+      (sameFileIdentity(f.absolute, primary.absolute) ||
+        isPointerTo(f.text, primary.absolute, { fromDir: path.dirname(f.absolute) })),
   );
   const separate = others.filter((f) => !pointers.includes(f));
   return { primary, all: files, pointers, separate, hash: memorySetHash(files) };
