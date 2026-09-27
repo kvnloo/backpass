@@ -103,6 +103,9 @@ export function crossSurfaceDuplicates(memoryFile, skills = [], threshold = CROS
 
   const hits = [];
   for (const unit of units) {
+    // A one-token exact match is often just a separator/label and is not enough text to
+    // support a meaningful "restates this skill" claim, even when similarity is 1.00.
+    if ((unit.tokens || 0) < 2) continue;
     const prepared = preparedUnit(unit.text);
     let best = null;
     for (const candidate of catalog) {
