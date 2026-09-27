@@ -40,7 +40,7 @@ const creating = argv.includes("sessions") && argv.includes("new");
 const status = argv.includes("status");
 const closing = argv.includes("sessions") && argv.includes("close");
 if (creating && process.env.FAKE_ACPX_MODE === "contention") {
-  process.stderr.write("EPERM: operation not permitted, rename C:\\Users\\u\\.acpx\\sessions\\.tmp -> C:\\Users\\u\\.acpx\\sessions\\index.json\\n");
+  process.stderr.write("EPERM: operation not permitted, rename index.json\\n");
   process.exit(1);
 }
 if (creating && process.env.FAKE_ACPX_MODE === "no-sessions") {
