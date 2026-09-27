@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.29](https://github.com/kunchenguid/backpass/compare/backpass-v0.1.28...backpass-v0.1.29) (2026-09-27)
+
+
+### Features
+
+* train named nested memory files in monorepos ([#159](https://github.com/kunchenguid/backpass/issues/159)) ([87a79fb](https://github.com/kunchenguid/backpass/commit/87a79fb6f9cd6754203b4584978687e06f824e02))
+
 ## [0.1.28](https://github.com/kunchenguid/backpass/compare/backpass-v0.1.27...backpass-v0.1.28) (2026-09-25)
 
 
