@@ -173,6 +173,7 @@ function entryKind(dir, entry) {
 }
 
 const SKILL_FILENAME = "SKILL.md";
+const VCS_METADATA_NAMES = new Set([".git", ".hg", ".svn", ".bzr"]);
 
 function isFile(file) {
   try {
@@ -208,6 +209,9 @@ function walkFiles(dir, prefix = "", confineTo = null, confined = [], searchPath
     else confined.push({ relative: relativePath, reason });
   };
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    // Version-control metadata is not part of the skill surface. Copying it can pull
+    // object stores into synthesis and turn a small skill edit into thousands of changes.
+    if (VCS_METADATA_NAMES.has(entry.name)) continue;
     const relative = prefix ? path.posix.join(prefix, entry.name) : entry.name;
     // Follow symlinks: a skills directory is commonly a set of links into a shared
     // library, and those are the files the harness loads. Staging copies what it finds,
