@@ -53,6 +53,8 @@ test("the staging copy holds exactly the memory file and the skills directory, u
   const { repo, workspace } = stage({
     ".agents/skills/db/SKILL.md": SKILL,
     ".agents/skills/db/notes.txt": "n",
+    ".agents/skills/db/.git/objects/pack-deadbeef": "git object",
+    ".agents/skills/db/.svn/wc.db": "svn metadata",
     "src/index.js": "code",
   });
   assert.equal(workspace.root, path.join(repo.root, ".backpass", "synthesis"));
@@ -62,6 +64,8 @@ test("the staging copy holds exactly the memory file and the skills directory, u
     fs.existsSync(path.join(workspace.root, ".agents/skills/db/notes.txt")),
     "skill directories are copied whole",
   );
+  assert.ok(!fs.existsSync(path.join(workspace.root, ".agents/skills/db/.git")), "git metadata is never staged");
+  assert.ok(!fs.existsSync(path.join(workspace.root, ".agents/skills/db/.svn")), "vcs metadata is never staged");
   assert.ok(!fs.existsSync(path.join(workspace.root, "src")), "the code is read from the repo, never copied");
   assert.deepEqual(
     [...workspace.originals.keys()].sort(),
@@ -871,4 +875,48 @@ test("project scope bills a skill symlinked out of the repo but never stages it"
   const external = prepareWorkspace({ state, repo, memoryFile, skillsDir: ".agents/skills", allowExternal: true });
   assert.equal(external.originals.get(".agents/skills/db/SKILL.md"), SKILL);
   assert.ok(external.originals.has(".agents/skills/solo.md"));
+});
+
+test("VCS names are excluded as files or directories while ordinary support files remain exact", () => {
+  for (const name of [".git", ".hg", ".svn", ".bzr"]) {
+    for (const suffix of ["", "/objects/fixture"]) {
+      const metadata = `.agents/skills/db/${name}${suffix}`;
+      const support = ".agents/skills/db/.github/notes.txt";
+      const { repo, workspace } = stage({
+        ".agents/skills/db/SKILL.md": SKILL,
+        ".agents/skills/db/.gitignore": "generated/\n",
+        [support]: "support bytes\n",
+        [metadata]: "synthetic metadata\n",
+      });
+      assert.equal(fs.existsSync(path.join(workspace.root, metadata)), false, metadata);
+      assert.equal(fs.readFileSync(path.join(repo.root, metadata), "utf8"), "synthetic metadata\n");
+      assert.equal(fs.readFileSync(path.join(workspace.root, support), "utf8"), "support bytes\n");
+      assert.equal(fs.readFileSync(path.join(workspace.root, ".agents/skills/db/.gitignore"), "utf8"), "generated/\n");
+      assert.deepEqual(
+        [...workspace.originals.keys()].sort(),
+        ["AGENTS.md", ".agents/skills/db/SKILL.md", ".agents/skills/db/.gitignore", support].sort(),
+      );
+      assert.deepEqual(measureWorkspace(workspace).changes, []);
+    }
+  }
+});
+
+test("metadata exclusion preserves full measurement of ordinary support and skill edits", () => {
+  const { workspace } = stage({
+    ".agents/skills/db/SKILL.md": SKILL,
+    ".agents/skills/db/notes.txt": "original support\n",
+    ".agents/skills/db/.git/objects/fixture": "synthetic object\n",
+  });
+  writeIn(workspace.root, ".agents/skills/db/SKILL.md", (text) => `${text}\n- Run the fixture.\n`);
+  writeIn(workspace.root, ".agents/skills/db/notes.txt", "revised support\n");
+  const measured = measureWorkspace(workspace);
+  assert.deepEqual(
+    measured.changes.map((change) => [change.kind, change.file]),
+    [
+      ["hunk", ".agents/skills/db/SKILL.md"],
+      ["hunk", ".agents/skills/db/notes.txt"],
+    ],
+  );
+  assert.equal(measured.texts.get(".agents/skills/db/notes.txt"), "revised support\n");
+  assert.deepEqual(measured.stray, []);
 });
