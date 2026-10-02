@@ -88,6 +88,8 @@ test("obvious secrets are redacted before a trace reaches any model", () => {
   assert.match(redact("export GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123"), /\[redacted:GITHUB_TOKEN\]/);
   assert.match(redact("key sk-ant-api03-abcdefghijklmnopqrstuvwxyz"), /\[redacted:ANTHROPIC_KEY\]/);
   assert.match(redact("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE"), /redacted/);
+  assert.equal(redact(`apikey_${"a".repeat(64)}`), "[redacted:API_KEY]");
+  assert.equal(redact(`APIKEY_${"B".repeat(64)}`), "[redacted:API_KEY]");
   assert.match(redact("MY_SECRET: hunter2hunter2"), /MY_SECRET=\[redacted\]/);
   assert.equal(redact("nothing sensitive here"), "nothing sensitive here");
 });
@@ -305,4 +307,25 @@ test("a gap's domain defaults to project, and a citation is kept only when it lo
       ["project", undefined],
     ],
   );
+});
+
+test("distillation redacts unassigned apikey shapes in messages and tool summaries without changing source events", () => {
+  const keys = ["apikey_", "APIKEY_", "ApiKey_", "apikey_"].map(
+    (prefix, index) => `${prefix}${String(index).repeat(64)}`,
+  );
+  const events = [
+    { kind: "message", role: "user", text: `fixture user ${keys[0]} finished` },
+    { kind: "message", role: "assistant", text: `fixture assistant ${keys[1]} finished` },
+    { kind: "tool", name: "Bash", input: { command: `fixture ${keys[2]}` }, result: `fixture ${keys[3]}` },
+  ];
+  const before = JSON.stringify(events);
+  const { trace, stats } = distill(events, META);
+  assert.equal(JSON.stringify(events), before, "raw source events stay unchanged");
+  for (const key of keys) assert.equal(trace.includes(key), false);
+  assert.equal(trace.match(/\[redacted:API_KEY\]/g)?.length, 4);
+  assert.match(trace, /fixture user \[redacted:API_KEY\] finished/);
+  assert.match(trace, /fixture assistant \[redacted:API_KEY\] finished/);
+  assert.equal(stats.userTurns, 1);
+  assert.equal(stats.assistantTurns, 1);
+  assert.equal(stats.toolCalls, 1);
 });
