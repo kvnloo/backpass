@@ -10,6 +10,7 @@ const PATTERNS = [
   [/\b(sk-proj-[A-Za-z0-9_-]{16,})/g, "OPENAI_KEY"],
   [/\b(sk-or-v1-[A-Za-z0-9_-]{16,})/g, "OPENROUTER_KEY"],
   [/\b(sk-[A-Za-z0-9]{32,})/g, "API_KEY"],
+  [/\b(apikey_[A-Za-z0-9_-]{32,})/gi, "API_KEY"],
   [/\b(gh[pousr]_[A-Za-z0-9]{16,})/g, "GITHUB_TOKEN"],
   [/\b(xox[abposr]-[A-Za-z0-9-]{10,})/g, "SLACK_TOKEN"],
   [/\b(AKIA[0-9A-Z]{16})\b/g, "AWS_ACCESS_KEY_ID"],
