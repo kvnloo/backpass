@@ -148,6 +148,12 @@ export async function cmdApply(ctx) {
 
   if (surfaceFile) await closeApplySurface(surfaceFile);
 
+  if (!ctx.flags["dry-run"] && results.failed.length === 0) {
+    proposal.appliedAt = new Date().toISOString();
+    proposal.appliedBy = "apply";
+    config.state.writeProposal(proposal);
+  }
+
   if (ctx.flags.json) {
     json({ decisions, rejectReasons, results, mix: proposal.stats.corpusMix || null });
     return results.failed.length ? 1 : 0;

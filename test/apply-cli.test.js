@@ -256,6 +256,17 @@ test("an unchanged memory file applies every accepted edit and its skills", () =
 
   assert.match(applied.output, /wrote AGENTS\.md \(e1, e2\)/);
   assert.equal(porcelain(dir).includes(".backpass"), false, "run state stays out of the working tree");
+
+  const saved = JSON.parse(fs.readFileSync(path.join(dir, ".backpass/proposal.json"), "utf8"));
+  assert.equal(saved.appliedBy, "apply");
+  assert.ok(saved.appliedAt);
+
+  const replay = runApply(
+    dir,
+    proposal.edits.map((e) => e.id),
+  );
+  assert.equal(replay.status, 1, `replay should be refused:\n${replay.output}`);
+  assert.match(replay.output, /already applied by apply/);
 });
 
 test("a symlinked memory file updates its target without replacing the link", () => {
@@ -763,4 +774,105 @@ test("--decisions belongs to apply alone", () => {
   });
   assert.equal(result.status, 1, `${result.stdout}${result.stderr}`);
   assert.match(`${result.stdout}${result.stderr}`, /--decisions does not apply to status/);
+});
+
+const proposalFileOf = (dir) => path.join(dir, ".backpass", "proposal.json");
+const proposalBytesOf = (dir) => fs.readFileSync(proposalFileOf(dir), "utf8");
+const savedProposalOf = (dir) => JSON.parse(proposalBytesOf(dir));
+
+test("successful JSON apply stamps its proposal before returning and refuses replay", () => {
+  const dir = initRepo();
+  const proposal = proposeExtractions(dir);
+  const vector = proposal.edits.map((e) => `${e.id}=accepted`).join(" ");
+  const started = Date.now();
+  const applied = runDecided(dir, vector, ["--json"]);
+  assert.equal(applied.status, 0, applied.output);
+  assert.equal(JSON.parse(applied.stdout).results.failed.length, 0);
+  const saved = savedProposalOf(dir);
+  assert.equal(saved.appliedBy, "apply");
+  assert.ok(Date.parse(saved.appliedAt) >= started);
+  assert.ok(Date.parse(saved.appliedAt) <= Date.now());
+  const beforeReplay = proposalBytesOf(dir);
+  const replay = runDecided(dir, vector, ["--json"]);
+  assert.equal(replay.status, 1, replay.output);
+  assert.match(replay.output, /already applied by apply/);
+  assert.equal(proposalBytesOf(dir), beforeReplay);
+});
+
+test("dry-run leaves the saved proposal unchanged and a real apply remains available", () => {
+  const dir = initRepo();
+  const proposal = proposeExtractions(dir);
+  const vector = proposal.edits.map((e) => `${e.id}=accepted`).join(" ");
+  const before = proposalBytesOf(dir);
+  const dryRun = runDecided(dir, vector, ["--dry-run", "--json"]);
+  assert.equal(dryRun.status, 0, dryRun.output);
+  assert.equal(proposalBytesOf(dir), before);
+  assert.equal(fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8"), MEMORY_TEXT);
+  assert.equal(fs.existsSync(path.join(dir, ".agents")), false);
+  const applied = runDecided(dir, vector);
+  assert.equal(applied.status, 0, applied.output);
+  assert.equal(savedProposalOf(dir).appliedBy, "apply");
+});
+
+test("failed skill write leaves the proposal unchanged and can be retried after repair", () => {
+  const dir = initRepo();
+  const proposal = proposeExtractions(dir);
+  const vector = proposal.edits.map((e) => `${e.id}=accepted`).join(" ");
+  const before = proposalBytesOf(dir);
+  const obstruction = path.join(dir, ".agents/skills/release-details");
+  fs.mkdirSync(path.dirname(obstruction), { recursive: true });
+  fs.writeFileSync(obstruction, "concurrent parent\n");
+  const failed = runDecided(dir, vector, ["--json"]);
+  assert.equal(failed.status, 1, failed.output);
+  assert.ok(JSON.parse(failed.stdout).results.failed.length > 0);
+  assert.equal(proposalBytesOf(dir), before);
+  assert.equal(fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8"), MEMORY_TEXT);
+  assert.equal(fs.existsSync(path.join(dir, ".agents/skills/ci-details/SKILL.md")), false);
+  fs.unlinkSync(obstruction);
+  const retried = runDecided(dir, vector);
+  assert.equal(retried.status, 0, retried.output);
+  assert.equal(savedProposalOf(dir).appliedBy, "apply");
+});
+
+test("ending review without decisions leaves the proposal unchanged and retryable", () => {
+  const dir = initRepo();
+  const proposal = proposeExtractions(dir);
+  const before = proposalBytesOf(dir);
+  const { args, options } = applyInvocation(dir, []);
+  fs.writeFileSync(options.env.FAKE_LAVISH_SCENARIO, JSON.stringify({ polls: ["ENDED"] }));
+  const ended = spawnSync(process.execPath, args, options);
+  assert.equal(ended.status, 0, `${ended.stdout}${ended.stderr}`);
+  assert.match(ended.stdout, /No decisions received/);
+  assert.equal(proposalBytesOf(dir), before);
+  assert.equal(fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8"), MEMORY_TEXT);
+  const retried = runDecided(dir, proposal.edits.map((e) => `${e.id}=accepted`).join(" "));
+  assert.equal(retried.status, 0, retried.output);
+  assert.equal(savedProposalOf(dir).appliedBy, "apply");
+});
+
+test("a proposal with no edits is not stamped", () => {
+  const dir = initRepo();
+  const proposal = proposeExtractions(dir);
+  proposal.edits = [];
+  fs.writeFileSync(proposalFileOf(dir), JSON.stringify(proposal));
+  const before = proposalBytesOf(dir);
+  const applied = runApply(dir, []);
+  assert.equal(applied.status, 0, applied.output);
+  assert.match(applied.output, /no edits/);
+  assert.equal(proposalBytesOf(dir), before);
+});
+
+test("a completed all-rejected review is stamped while the memory stays unchanged", () => {
+  const dir = initRepo();
+  const proposal = proposeExtractions(dir);
+  const vector = proposal.edits.map((e) => `${e.id}=rejected`).join(" ");
+  const applied = runDecided(dir, vector, ["--json"]);
+  assert.equal(applied.status, 0, applied.output);
+  assert.equal(JSON.parse(applied.stdout).results.rejected, 2);
+  assert.equal(Object.keys(rejectionsOf(dir)).length, 2);
+  assert.equal(fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8"), MEMORY_TEXT);
+  assert.equal(savedProposalOf(dir).appliedBy, "apply");
+  const replay = runDecided(dir, vector);
+  assert.equal(replay.status, 1, replay.output);
+  assert.match(replay.output, /already applied by apply/);
 });
