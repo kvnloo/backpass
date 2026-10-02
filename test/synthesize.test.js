@@ -35,6 +35,10 @@ if (argv.includes("set")) process.exit(0);
 const fileAt = argv.indexOf("--file");
 if (fileAt < 0) process.exit(2);
 const prompt = fs.readFileSync(argv[fileAt + 1], "utf8");
+if (script.failPrompt && (!script.failPrompt.phase || script.failPrompt.phase === (prompt.includes("## Measured changes") ? "annotate" : "edit"))) {
+  process.stderr.write(script.failPrompt.stderr || "");
+  process.exit(script.failPrompt.code ?? 1);
+}
 const statePath = process.env.FAKE_ACPX_STATE;
 const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, "utf8")) : { annotate: 0 };
 function applyEdits(edits) {
@@ -79,6 +83,7 @@ const { parseMemoryUnits, readMemoryFile } = await import("../src/memory.js");
 const { foldEvidence } = await import("../src/fold.js");
 const { ProposalViolation } = await import("../src/proposal.js");
 const { State } = await import("../src/state.js");
+const { AcpxError, classifyAcpxFailure } = await import("../src/acpx.js");
 const { UserError, setLoggerSink } = await import("../src/logger.js");
 const { workspacePathFor } = await import("../src/workspace.js");
 const { makeRepo } = await import("./helpers/staging.js");
@@ -204,6 +209,32 @@ function setup(
       .map((l) => JSON.parse(l));
   return { repo, config, memoryFile, externalSkillsDir, run, calls };
 }
+
+test("an acpx synthesis prompt failure names prompt size and useful stderr", async () => {
+  const { run, calls } = setup({
+    failPrompt: {
+      code: 1,
+      stderr: "[acpx] tokens: input=12000 output=0 total=12000\ncontext length exceeded\n",
+    },
+    edit: {},
+    annotations: [{ reply: { edits: [] } }],
+  });
+
+  await assert.rejects(
+    () => run(),
+    (err) => {
+      assert.ok(err instanceof UserError, String(err));
+      assert.match(err.message, /synthesis-edit\.md measured \d+ bytes \(~\d+ tokens\)/);
+      assert.match(err.message, /context length exceeded/);
+      const promptCall = calls().find((call) => call.argv.includes("--file"));
+      const promptFile = promptCall.argv[promptCall.argv.indexOf("--file") + 1];
+      const bytes = fs.readFileSync(promptFile).byteLength;
+      assert.ok(err.message.includes(`measured ${bytes} bytes`));
+      assert.match(err.hint, /does not silently truncate synthesis prompts/);
+      return true;
+    },
+  );
+});
 
 test("root and nested synthesis both refuse direct writes to the other memory file", async () => {
   for (const pass of ["root", "nested"]) {
@@ -887,4 +918,79 @@ test("the synthesis prompt lists stored rejection identities and reasons", () =>
   assert.match(text, /cafef00ddeadbeef/);
   assert.match(text, /already-covered/);
   assert.doesNotMatch(text, /\(none\)/);
+});
+
+test("an annotate failure reports the exact prompt bytes after staging edits", async () => {
+  const { repo, run, calls } = setup({
+    failPrompt: { phase: "annotate", code: 1, stderr: "synthetic annotate failure\n" },
+    edit: { "AGENTS.md": { replace: [["Keep this file short.", "Keep this file concise."]] } },
+    annotations: [{ reply: { edits: [] } }],
+  });
+  await assert.rejects(
+    () => run(),
+    (err) => {
+      assert.ok(err instanceof UserError, String(err));
+      assert.match(err.message, /synthesis-annotate-1\.md measured \d+ bytes \(~\d+ tokens\)/);
+      assert.match(err.message, /synthetic annotate failure/);
+      const prompts = calls().filter((call) => call.argv.includes("--file"));
+      assert.equal(prompts.length, 2);
+      const promptFile = prompts[1].argv[prompts[1].argv.indexOf("--file") + 1];
+      assert.ok(err.message.includes(`measured ${fs.readFileSync(promptFile).byteLength} bytes`));
+      assert.match(err.hint, /does not silently truncate/);
+      return true;
+    },
+  );
+  assert.equal(fs.readFileSync(path.join(repo.root, "AGENTS.md"), "utf8"), AGENTS);
+  assert.equal(calls().filter((call) => call.argv.includes("close")).length, 1);
+});
+
+test("an edit-turn availability error keeps its AcpxError identity for the ladder", async () => {
+  const { run, config, calls } = setup({
+    failPrompt: { phase: "edit", code: 1, stderr: "[acpx] error: RUNTIME AUTH_REQUIRED fixture\n" },
+    edit: {},
+    annotations: [{ reply: { edits: [] } }],
+  });
+  let observed;
+  config.agents = {
+    ...agents,
+    withFallthrough: async (_role, fn) => {
+      try {
+        return await fn(pick);
+      } catch (err) {
+        observed = err;
+        throw err;
+      }
+    },
+  };
+  await assert.rejects(
+    () => run(),
+    (err) => {
+      assert.equal(err, observed);
+      assert.ok(err instanceof AcpxError);
+      assert.equal(classifyAcpxFailure(err), "unauthenticated");
+      assert.doesNotMatch(err.message, /measured \d+ bytes/);
+      return true;
+    },
+  );
+  assert.equal(calls().filter((call) => call.argv.includes("--file")).length, 1);
+  assert.equal(calls().filter((call) => call.argv.includes("close")).length, 1);
+});
+
+test("availability loss after editing is measured without starting another session", async () => {
+  const { run, calls } = setup({
+    failPrompt: { phase: "annotate", code: 1, stderr: "[acpx] error: RUNTIME AUTH_REQUIRED fixture\n" },
+    edit: { "AGENTS.md": { replace: [["Keep this file short.", "Keep this file concise."]] } },
+    annotations: [{ reply: { edits: [] } }],
+  });
+  await assert.rejects(
+    () => run(),
+    (err) => {
+      assert.ok(err instanceof UserError);
+      assert.match(err.message, /synthesis-annotate-1\.md measured \d+ bytes/);
+      assert.match(err.message, /AUTH_REQUIRED/);
+      return true;
+    },
+  );
+  assert.equal(calls().filter((call) => call.argv.includes("sessions") && call.argv.includes("new")).length, 1);
+  assert.equal(calls().filter((call) => call.argv.includes("--file")).length, 2);
 });
