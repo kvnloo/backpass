@@ -40,9 +40,7 @@ test("one-token exact matches are too small to report as cross-surface duplicati
     path: "CLAUDE.md",
     units: [{ id: "AG-001", text: "deploy", tokens: 1 }],
   };
-  const hits = crossSurfaceDuplicates(memoryFile, [
-    skill({ name: "deploy", description: "deploy", body: "" }),
-  ]);
+  const hits = crossSurfaceDuplicates(memoryFile, [skill({ name: "deploy", description: "deploy", body: "" })]);
   assert.deepEqual(hits, []);
 });
 
