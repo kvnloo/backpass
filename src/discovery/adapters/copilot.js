@@ -1,15 +1,7 @@
 import path from "node:path";
 
 import { emptyInteractionSignals } from "../../interaction.js";
-import {
-  attachToolResults,
-  home,
-  listDirs,
-  parseJsonLine,
-  readHeadLines,
-  readJsonl,
-  statOrNull,
-} from "./shared.js";
+import { attachToolResults, home, listDirs, parseJsonLine, readHeadLines, readJsonl, statOrNull } from "./shared.js";
 
 /**
  * GitHub Copilot CLI: COPILOT_HOME or ~/.copilot/session-state/<session-id>/events.jsonl

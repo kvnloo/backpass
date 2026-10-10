@@ -51,7 +51,11 @@ test("copilot adapter classifies session.start context and reads persisted turns
   assert.equal(model, "claude-sonnet-5");
   assert.deepEqual(
     messages(events).map((m) => m.role + ": " + m.text),
-    ["user: Fix the parser regression.", "assistant: I will run the focused test.", "assistant: The parser test passes."],
+    [
+      "user: Fix the parser regression.",
+      "assistant: I will run the focused test.",
+      "assistant: The parser test passes.",
+    ],
   );
 
   const [tool] = tools(events);
