@@ -5,7 +5,7 @@ import path from "node:path";
 /**
  * Loaded before every test file (`--import` in the package.json `test` script).
  *
- * Two things a test process must not share with the developer's machine:
+ * Three things a test process must not share with the developer's machine:
  *
  * - The config home. `loadConfig` layers `$XDG_CONFIG_HOME/backpass/config.json` under
  *   every run, so a developer's own personal config - custom ladders, hosts, a `user`
@@ -17,11 +17,17 @@ import path from "node:path";
  *   not remove them, which left over a thousand directories behind per full run. Node's
  *   `os.tmpdir()` reads `TMPDIR` on every call, so pointing it at one per-process root
  *   (inherited by spawned CLI children) lets a single removal clean up everything.
+ * - The harness homes. `CLAUDE_CONFIG_DIR` and `CODEX_HOME` relocate where memory files,
+ *   skills, and sessions are looked up. A coding agent that runs the suite usually has
+ *   one of them set, which moved the defaults the suite asserts and failed tests that
+ *   pass in a plain shell. Tests that cover relocation set the variable themselves.
  */
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "backpass-test-root-"));
 process.env.TMPDIR = root;
 const configHome = fs.mkdtempSync(path.join(root, "config-"));
 process.env.XDG_CONFIG_HOME = configHome;
+delete process.env.CLAUDE_CONFIG_DIR;
+delete process.env.CODEX_HOME;
 /** Make every directory under `dir` writable again, so a test that failed before restoring its
  * 0o555 fixture cannot keep the root from being removed. */
 function restoreWritable(dir) {
