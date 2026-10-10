@@ -92,6 +92,7 @@ export async function withRemoteEnv({ localHome, hosts, log = null }, fn) {
     XDG_CONFIG_HOME: path.join(localHome, ".config"),
     CLAUDE_CONFIG_DIR: undefined,
     CODEX_HOME: undefined,
+    COPILOT_HOME: undefined,
     HERMES_HOME: path.join(localHome, ".hermes-absent"),
     BACKPASS_SSH_BIN: FAKE_SSH,
     BACKPASS_FAKE_SSH_MAP: mapFile,
