@@ -764,43 +764,47 @@ test("an ignored file beside an external memory file is named by the path the us
   ]);
 });
 
-test("a skill in a store this user cannot read is skipped and named, not thrown", { skip: process.platform === "win32" ? "Windows chmod does not create a POSIX-unreadable fixture" : false }, () => {
-  const store = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "backpass-locked-store-")));
-  fs.mkdirSync(path.join(store, "locked"));
-  const unreadable = path.join(store, "locked", "SKILL.md");
-  fs.writeFileSync(unreadable, SKILL);
-  // The writability probe looks at the directory, never at this file, so the read failure
-  // is the only thing that can keep it out.
-  fs.chmodSync(unreadable, 0o000);
+test(
+  "a skill in a store this user cannot read is skipped and named, not thrown",
+  { skip: process.platform === "win32" ? "Windows chmod does not create a POSIX-unreadable fixture" : false },
+  () => {
+    const store = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "backpass-locked-store-")));
+    fs.mkdirSync(path.join(store, "locked"));
+    const unreadable = path.join(store, "locked", "SKILL.md");
+    fs.writeFileSync(unreadable, SKILL);
+    // The writability probe looks at the directory, never at this file, so the read failure
+    // is the only thing that can keep it out.
+    fs.chmodSync(unreadable, 0o000);
 
-  const repo = makeRepo({ "AGENTS.md": AGENTS, ".agents/skills/db/SKILL.md": SKILL });
-  const loaded = path.join(repo.root, ".agents", "skills");
-  fs.symlinkSync(path.join(store, "locked"), path.join(loaded, "locked"));
+    const repo = makeRepo({ "AGENTS.md": AGENTS, ".agents/skills/db/SKILL.md": SKILL });
+    const loaded = path.join(repo.root, ".agents", "skills");
+    fs.symlinkSync(path.join(store, "locked"), path.join(loaded, "locked"));
 
-  try {
-    const state = new State(repo.root).ensure();
-    const memoryFile = readMemoryFile(repo.root, "AGENTS.md");
-    // User scope, where an out-of-repo store is legitimately stageable - so nothing but
-    // the read failure itself can keep this file out.
-    const workspace = prepareWorkspace({
-      state,
-      repo,
-      memoryFile,
-      skillsDir: ".agents/skills",
-      allowExternal: true,
-    });
+    try {
+      const state = new State(repo.root).ensure();
+      const memoryFile = readMemoryFile(repo.root, "AGENTS.md");
+      // User scope, where an out-of-repo store is legitimately stageable - so nothing but
+      // the read failure itself can keep this file out.
+      const workspace = prepareWorkspace({
+        state,
+        repo,
+        memoryFile,
+        skillsDir: ".agents/skills",
+        allowExternal: true,
+      });
 
-    assert.deepEqual([...workspace.originals.keys()], ["AGENTS.md", ".agents/skills/db/SKILL.md"]);
-    assert.deepEqual(walkStaged(path.join(workspace.root, ".agents/skills")), ["db/SKILL.md"]);
-    assert.deepEqual(workspace.unstageable, [
-      { path: ".agents/skills/locked/SKILL.md", reason: "could not be read when the staging copy was built" },
-    ]);
-    // The readable skill beside it still measures normally.
-    assert.deepEqual(measureWorkspace(workspace).changes, []);
-  } finally {
-    fs.chmodSync(unreadable, 0o644);
-  }
-});
+      assert.deepEqual([...workspace.originals.keys()], ["AGENTS.md", ".agents/skills/db/SKILL.md"]);
+      assert.deepEqual(walkStaged(path.join(workspace.root, ".agents/skills")), ["db/SKILL.md"]);
+      assert.deepEqual(workspace.unstageable, [
+        { path: ".agents/skills/locked/SKILL.md", reason: "could not be read when the staging copy was built" },
+      ]);
+      // The readable skill beside it still measures normally.
+      assert.deepEqual(measureWorkspace(workspace).changes, []);
+    } finally {
+      fs.chmodSync(unreadable, 0o644);
+    }
+  },
+);
 
 test("a link to a whole repository stages only the skill file, never the tree behind it", () => {
   const repo = makeRepo({ "AGENTS.md": AGENTS });
