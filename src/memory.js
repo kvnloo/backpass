@@ -489,7 +489,7 @@ export function pointerImportPath(text, options = {}) {
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
-  while (lines.length && /^#{1,6}\\s+\\S/.test(lines[0])) lines.shift();
+  while (lines.length && /^#{1,6}\s+\S/.test(lines[0])) lines.shift();
   if (lines.length !== 1) return null;
   const imported = lines[0].replace(/^@\.\//, "@");
   if (!imported.startsWith("@")) return null;
