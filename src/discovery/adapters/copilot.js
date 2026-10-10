@@ -47,8 +47,8 @@ export function enumerate() {
 function githubRemote(repository, hostType) {
   const value = String(repository || "").trim();
   if (!value || (hostType && String(hostType).toLowerCase() !== "github")) return [];
-  if (!/^[^/\\s]+\\/[^/\\s]+$/.test(value)) return [];
-  return ["https://github.com/" + value.replace(/\\.git$/i, "") + ".git"];
+  if (!/^[^/\s]+\/[^/\s]+$/.test(value)) return [];
+  return ["https://github.com/" + value.replace(/\.git$/i, "") + ".git"];
 }
 
 function contextFromStart(entry) {
