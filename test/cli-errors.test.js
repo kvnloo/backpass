@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { reportError } from "../src/cli.js";
+import { main, reportError } from "../src/cli.js";
 import { AcpxError } from "../src/acpx.js";
+import { ALL_HARNESSES } from "../src/config.js";
 
 function capture(t) {
   const lines = [];
@@ -56,4 +57,23 @@ test("a non-timeout harness failure keeps its stack trace", (t) => {
   assert.match(output, /AcpxError: acpx claude exec failed: exit 1/);
   assert.match(output, /\n\s+at /);
   assert.doesNotMatch(output, /rerun to retry/);
+});
+
+test("--help names every default harness under --harness", async (t) => {
+  const lines = [];
+  const original = console.log;
+  console.log = (...args) => lines.push(args.join(" "));
+  t.after(() => {
+    console.log = original;
+  });
+
+  assert.equal(await main(["--help"]), 0);
+
+  const help = lines.join("\n");
+  const listed = /--harness <a,b>[^\n]*\n\s*\(([^)]*)\)/.exec(help);
+  assert.ok(listed, help);
+  assert.deepEqual(
+    listed[1].split(/,\s*/).map((name) => name.trim()),
+    ALL_HARNESSES,
+  );
 });

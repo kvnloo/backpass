@@ -82,16 +82,27 @@ test("copilot classify falls back to the directory name and file mtime, and need
 
 test("copilot read pairs each tool result by call id, marks failures, and leaves an unfinished call open", () => {
   const root = tmpdir("copilot-tools");
+  const call = (toolCallId, toolName, args) => ({
+    type: "tool.execution_start",
+    data: { toolCallId, toolName, arguments: args },
+  });
+  const done = (toolCallId, data) => ({ type: "tool.execution_complete", data: { toolCallId, ...data } });
   const file = writeSession(root, "tools", {
     events: [
       start({ cwd: "/repo/demo" }, { selectedModel: "claude-sonnet-5" }),
-      { type: "user.message", data: { content: "Run both checks." } },
+      { type: "user.message", data: { content: "Run every check." } },
       { type: "user.message", data: { content: "   " } },
-      { type: "tool.execution_start", data: { toolCallId: "c1", toolName: "bash", arguments: { command: "lint" } } },
-      { type: "tool.execution_start", data: { toolCallId: "c2", toolName: "bash", arguments: { command: "test" } } },
-      { type: "tool.execution_complete", data: { toolCallId: "c2", success: false, error: { message: "exit 1" } } },
-      { type: "tool.execution_complete", data: { toolCallId: "c1", success: true, result: { content: "clean" } } },
-      { type: "tool.execution_start", data: { toolCallId: "c3", toolName: "view", arguments: { path: "a.js" } } },
+      // Every call is open before the first completion, and no completion answers the
+      // most recently started unanswered call. Only the call id can pair them: attaching
+      // a result to the latest unanswered call would put "lint clean" on c4, and on any
+      // other order-based rule c3 or c2 would carry the wrong text.
+      call("c1", "bash", { command: "lint" }),
+      call("c2", "bash", { command: "test" }),
+      call("c3", "bash", { command: "build" }),
+      call("c4", "view", { path: "a.js" }),
+      done("c1", { success: true, result: { content: "lint clean" } }),
+      done("c3", { success: false, error: { message: "build exit 1" } }),
+      done("c2", { success: true, result: { content: "12 passing" } }),
       { type: "session.unknown_future_event", data: { content: "ignored" } },
     ],
   });
@@ -100,15 +111,57 @@ test("copilot read pairs each tool result by call id, marks failures, and leaves
   assert.equal(model, "claude-sonnet-5");
   assert.deepEqual(
     events.map((event) =>
-      event.kind === "tool" ? [event.input.command ?? event.input.path, event.result] : event.text,
+      event.kind === "tool" ? [event.input.command ?? event.input.path, event.result, event.status] : event.text,
     ),
-    ["Run both checks.", ["lint", "clean"], ["test", "exit 1"], ["a.js", undefined]],
-  );
-  assert.deepEqual(
-    events.filter((event) => event.kind === "tool").map((event) => event.status),
-    ["completed", "error", undefined],
+    [
+      "Run every check.",
+      ["lint", "lint clean", "completed"],
+      ["test", "12 passing", "completed"],
+      ["build", "build exit 1", "error"],
+      ["a.js", undefined, undefined],
+    ],
   );
   assert.ok(events.every((event) => !("pendingId" in event)));
+});
+
+test("copilot read exports result.detailedContent when a completion carries no result.content", () => {
+  const root = tmpdir("copilot-detailed");
+  const call = (toolCallId) => ({
+    type: "tool.execution_start",
+    data: { toolCallId, toolName: "bash", arguments: { command: toolCallId } },
+  });
+  const done = (toolCallId, data) => ({ type: "tool.execution_complete", data: { toolCallId, ...data } });
+  const file = writeSession(root, "detailed", {
+    events: [
+      start({ cwd: "/repo/demo" }),
+      call("only-detailed"),
+      done("only-detailed", { success: true, result: { detailedContent: "diff --git a/a.js b/a.js" } }),
+      call("both"),
+      done("both", {
+        success: true,
+        result: { content: "1 file changed", detailedContent: "diff --git a/b.js b/b.js" },
+      }),
+      call("failed-detailed"),
+      done("failed-detailed", {
+        success: false,
+        result: { detailedContent: "stderr: no such file" },
+        error: { message: "exit 2" },
+      }),
+      call("neither"),
+      done("neither", { success: true, result: {} }),
+    ],
+  });
+
+  const { events } = copilot.read({ path: file });
+  assert.deepEqual(
+    events.map((event) => [event.input.command, event.result, event.status]),
+    [
+      ["only-detailed", "diff --git a/a.js b/a.js", "completed"],
+      ["both", "1 file changed", "completed"],
+      ["failed-detailed", "stderr: no such file", "error"],
+      ["neither", "", "completed"],
+    ],
+  );
 });
 
 test("local discovery associates Copilot sessions by cwd or recorded repository and drops backpass's own", async () => {

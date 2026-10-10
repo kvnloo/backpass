@@ -77,8 +77,13 @@ export function classify(candidate) {
   };
 }
 
+/**
+ * A completion's text: the concise `result.content`, else `result.detailedContent` (some
+ * tools record only the detailed form), else the error message of a failed call.
+ */
 function toolResult(data) {
   if (data?.result?.content != null) return data.result.content;
+  if (data?.result?.detailedContent != null) return data.result.detailedContent;
   if (data?.error?.message != null) return data.error.message;
   return "";
 }
