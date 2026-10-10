@@ -153,7 +153,7 @@ else's backpass at a machine. The personal file is
 An object entry may set an absolute remote `node` path, an optional `harnesses` subset,
 a positive integer `connectTimeoutSeconds` (default `10`), and store relocation variables
 under `env`. The allowed variables are `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `HERMES_HOME`,
-`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, `BB_DATA_DIR`, and
+`COPILOT_HOME`, `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, `BB_DATA_DIR`, and
 `BB_PI_BRIDGE_SESSION_DIR`.
 
 backpass installs nothing on the remote. It runs your own `ssh` (with `BatchMode=yes`,
@@ -811,7 +811,7 @@ CLI flags on top:
     ]
   },
   "discovery": {
-    "harnesses": ["claude", "codex", "pi", "opencode", "grok", "cursor", "hermes"],
+    "harnesses": ["claude", "codex", "pi", "opencode", "grok", "cursor", "hermes", "copilot"],
     "since": "30d",
     "worktreeGlobs": [],
     "cloneRoots": [],
