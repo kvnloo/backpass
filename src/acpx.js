@@ -507,6 +507,41 @@ export async function probeSession({
 }
 
 /**
+ * acpx's exit code for a turn in which the harness refused a tool request
+ * (`EXIT_CODES.PERMISSION_DENIED` in acpx). The turn itself may still have finished.
+ */
+export const ACPX_EXIT_PERMISSION_DENIED = 5;
+
+/**
+ * Settle the exit of one finished model turn, for `execOneShot` and a session `prompt()`
+ * alike. Call it after the spawn-error and timeout checks.
+ *
+ * A clean exit denied nothing. `ACPX_EXIT_PERMISSION_DENIED` with a complete parseable
+ * JSON answer on stdout is a usable turn: the answer is kept and the refusals are counted
+ * from acpx's own stderr, never from the model's text. Every other non-zero exit, and a
+ * permission exit without parseable JSON, throws.
+ *
+ * @param {{ code?: number | null, stdout?: string, stderr?: string }} result
+ * @param {{ agent: string, label: "exec" | "session prompt" }} call
+ * @returns {{ deniedRequests: number, note: string | null }}
+ */
+function settleTurnExit(result, { agent, label }) {
+  if (result.code === 0) return { deniedRequests: 0, note: null };
+  const usable = result.code === ACPX_EXIT_PERMISSION_DENIED && Boolean(extractJson(stripAcpxNoise(result.stdout)));
+  if (!usable) {
+    throw new AcpxError(
+      `acpx ${agent} ${label} failed (exit ${result.code}): ${firstLine(result.stderr) || `exit ${result.code}`}`,
+      result,
+    );
+  }
+  const deniedRequests = Math.max(1, (String(result.stderr || "").match(/PERMISSION_DENIED/gi) || []).length);
+  return {
+    deniedRequests,
+    note: `${agent} denied ${deniedRequests} tool request(s), but the turn returned parseable JSON; keeping the completed answer`,
+  };
+}
+
+/**
  * Tier 1 - one-shot analysis call (design section 5).
  *
  * `--approve-reads` is what makes the cheap-first escape hatch work: the agent may open
@@ -553,12 +588,7 @@ export async function execOneShot({
         { ...result, timedOut: true },
       );
     }
-    if (result.code !== 0) {
-      throw new AcpxError(
-        `acpx ${agent} exec failed (exit ${result.code}): ${firstLine(result.stderr) || `exit ${result.code}`}`,
-        result,
-      );
-    }
+    const denial = settleTurnExit(result, { agent, label: "exec" });
     assertNotAcpxBudgetKill({
       agent,
       label: "exec",
@@ -577,8 +607,8 @@ export async function execOneShot({
       usage,
       raw: result.stdout,
       stderr: result.stderr,
-      notes: invocation.notes,
-      deniedRequests: 0,
+      notes: denial.note ? [...invocation.notes, denial.note] : invocation.notes,
+      deniedRequests: denial.deniedRequests,
     };
   } finally {
     invocation.dispose();
@@ -757,20 +787,8 @@ export async function openSession({
         { ...result, timedOut: true },
       );
     }
-    let deniedRequests = 0;
-    if (result.code !== 0) {
-      const usablePermissionDenied = result.code === 5 && Boolean(extractJson(stripAcpxNoise(result.stdout)));
-      if (!usablePermissionDenied) {
-        throw new AcpxError(
-          `acpx ${agent} session prompt failed (exit ${result.code}): ${firstLine(result.stderr) || `exit ${result.code}`}`,
-          result,
-        );
-      }
-      deniedRequests = Math.max(1, (String(result.stderr || "").match(/PERMISSION_DENIED/gi) || []).length);
-      notes.push(
-        `${agent} denied ${deniedRequests} tool request(s), but the turn returned parseable JSON; keeping the completed answer`,
-      );
-    }
+    const denial = settleTurnExit(result, { agent, label: "session prompt" });
+    if (denial.note) notes.push(denial.note);
 
     const combined = `${result.stdout}\n${result.stderr}`;
     /** @type {Record<string, number> | null} */
@@ -787,7 +805,7 @@ export async function openSession({
       raw: result.stdout,
       stderr: result.stderr,
       notes,
-      deniedRequests,
+      deniedRequests: denial.deniedRequests,
     };
   };
 
@@ -845,7 +863,8 @@ export async function sessionPrompt({
       approveReads,
       suppressReads,
     });
-    return { ...fallback, notes };
+    // The one-shot's own notes (a kept answer after denied requests) ride along.
+    return { ...fallback, notes: [...notes, ...fallback.notes] };
   }
 
   const promptStartedAt = Date.now();
