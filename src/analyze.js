@@ -156,7 +156,6 @@ export function sanitizeEvidence(parsed, memoryFile = null, trace = null) {
     gaps: [],
     usedRawTranscript: parsed?.usedRawTranscript === true,
     quotesNotInTrace: 0,
-    deniedRequests: 0,
   };
   if (!parsed || typeof parsed !== "object") return clean;
 
@@ -406,6 +405,7 @@ export async function analyzeTranscripts({
     usage: [],
     staleMemoryHash: 0,
     quotesNotInTrace: 0,
+    deniedRequests: 0,
   };
   const priorHashes = new Set();
   const transcriptMetadata = (transcript) => ({

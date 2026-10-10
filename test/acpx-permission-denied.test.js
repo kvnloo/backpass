@@ -38,6 +38,7 @@ fs.chmodSync(fakeAcpx, 0o755);
 
 process.env.BACKPASS_ACPX_BIN = fakeAcpx;
 const { AcpxError, sessionPrompt } = await import("../src/acpx.js");
+const { sanitizeEvidence } = await import("../src/analyze.js");
 
 test.after(() => {
   fs.rmSync(dir, { recursive: true, force: true });
@@ -55,7 +56,10 @@ test("exit 5 keeps a completed parseable JSON turn and records the denied reques
 
   assert.doesNotThrow(() => JSON.parse(result.text));
   assert.equal(result.deniedRequests, 1);
-  assert.ok(result.notes.some((note) => /denied 1 tool request/.test(note)), result.notes.join("\n"));
+  assert.ok(
+    result.notes.some((note) => /denied 1 tool request/.test(note)),
+    result.notes.join("\n"),
+  );
   assert.deepEqual(result.usage, { input: 4, output: 20, total: 24 });
 });
 
@@ -76,4 +80,12 @@ test("exit 5 without parseable JSON remains fatal", async () => {
       return true;
     },
   );
+});
+
+test("model evidence carries no denied-request count of its own", () => {
+  // The count comes from the harness exit, not from the model's JSON. A default on the
+  // evidence would overwrite the recorded count when the two are stored together.
+  const evidence = sanitizeEvidence({ positive: [], negative: [], gaps: [], deniedRequests: 7 });
+  assert.equal("deniedRequests" in evidence, false);
+  assert.deepEqual({ deniedRequests: 2, ...evidence }.deniedRequests, 2);
 });

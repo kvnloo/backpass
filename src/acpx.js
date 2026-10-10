@@ -781,7 +781,14 @@ export async function openSession({
       usage = cumulative ? subtractUsage(cumulative, storeUsageSeen) : null;
       if (cumulative) storeUsageSeen = cumulative;
     }
-    return { text: stripAcpxNoise(result.stdout), usage, raw: result.stdout, stderr: result.stderr, notes, deniedRequests };
+    return {
+      text: stripAcpxNoise(result.stdout),
+      usage,
+      raw: result.stdout,
+      stderr: result.stderr,
+      notes,
+      deniedRequests,
+    };
   };
 
   return { notes, prompt, close };
