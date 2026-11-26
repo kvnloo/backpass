@@ -88,6 +88,8 @@ test("obvious secrets are redacted before a trace reaches any model", () => {
   assert.match(redact("export GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123"), /\[redacted:GITHUB_TOKEN\]/);
   assert.match(redact("key sk-ant-api03-abcdefghijklmnopqrstuvwxyz"), /\[redacted:ANTHROPIC_KEY\]/);
   assert.match(redact("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE"), /redacted/);
+  assert.equal(redact(`apikey_${"a".repeat(64)}`), "[redacted:API_KEY]");
+  assert.equal(redact(`APIKEY_${"B".repeat(64)}`), "[redacted:API_KEY]");
   assert.match(redact("MY_SECRET: hunter2hunter2"), /MY_SECRET=\[redacted\]/);
   assert.equal(redact("nothing sensitive here"), "nothing sensitive here");
 });
